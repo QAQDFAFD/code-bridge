@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var isReceiving = true
     private var serverStatusLine = "Starting…"
     private var titleResetTask: Task<Void, Never>?
+    private let toast = CodeToast()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -61,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         history.add(event)
         ClipboardWriter.copy(event.code)
+        toast.show(code: event.code)
         showNotification(for: event)
         flashStatusItem()
         rebuildMenu()

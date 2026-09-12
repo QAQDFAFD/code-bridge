@@ -346,16 +346,19 @@ private fun PermissionStatusRow(
 /**
  * Finds and opens the OEM auto-start settings. The page lives in different
  * packages/activities per ROM (and per ROM version), so instead of hardcoded
- * components we scan likely packages — including the system settings app,
- * where ColorOS keeps it — for exported activities whose class name mentions
+ * components we scan likely packages — including the system settings app and
+ * OPPO's battery app — for exported activities whose class name mentions
  * "startup"/"autostart", and launch the first one that resolves.
- * Falls back to the system Apps list with a toast hint.
+ * Some ROMs (e.g. newer ColorOS) guard the page with a signature permission,
+ * making it unreachable for third-party apps; we then fall back to the system
+ * Apps list with a toast pointing at the Auto-start entry.
  */
 private fun openAutoStartSettings(context: Context) {
     val packages = listOf(
         "com.coloros.safecenter",
         "com.oppo.safe",
         "com.oplus.safecenter",
+        "com.oplus.battery",
         "com.android.settings",
         "com.miui.securitycenter",
         "com.huawei.systemmanager",
@@ -385,7 +388,7 @@ private fun openAutoStartSettings(context: Context) {
 
     Toast.makeText(
         context,
-        "Find CodeBridge under Settings → Apps and allow Auto-start",
+        "Auto-start: open Settings → Apps → Auto-start and allow CodeBridge",
         Toast.LENGTH_LONG
     ).show()
     runCatching {

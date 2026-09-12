@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# SwiftPM / Xcode
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Android / Gradle
+.gradle/
+build/
+local.properties
+captures/
+*.iml
+.idea/
+*.apk
+*.aab
+
+# Signing — never commit release keystores
+*.keystore
+!debug.keystore
+
+# Logs / misc
+*.log
+*.hprof

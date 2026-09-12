@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -604,11 +605,17 @@ private fun ScanQrPage(onPaired: () -> Unit) {
         Box(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color.Black)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
-            if (hasCameraPermission) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.Black)
+            ) {
+                if (hasCameraPermission) {
                 QrCameraPreview(onCode = ::handleScannedText)
 
                 if (!paired) {
@@ -637,6 +644,7 @@ private fun ScanQrPage(onPaired: () -> Unit) {
                     Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
                         Text("Grant Camera Access")
                     }
+                }
                 }
             }
         }

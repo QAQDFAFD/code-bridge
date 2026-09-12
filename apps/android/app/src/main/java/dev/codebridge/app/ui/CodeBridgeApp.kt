@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.SystemClock
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -22,6 +23,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,10 +34,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -76,6 +81,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import dev.codebridge.app.camera.QrAnalyzer
 import dev.codebridge.app.data.CodeBridgeSettings
 import dev.codebridge.app.data.PairedDeviceStore
+import dev.codebridge.app.data.PairedMac
 import dev.codebridge.app.data.SettingsStore
 import dev.codebridge.app.net.DeviceMonitor
 import dev.codebridge.app.net.PairingPayloadParser
@@ -92,35 +98,49 @@ private const val PAGE_COUNT = 2
 
 @Composable
 fun CodeBridgeApp(monitor: DeviceMonitor) {
+    var showAddScreen by remember { mutableStateOf(false) }
+
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
-            PairingScreen(monitor)
+            if (showAddScreen) {
+                AddMacScreen(
+                    monitor = monitor,
+                    onDone = { showAddScreen = false }
+                )
+            } else {
+                PairedMacsScreen(
+                    monitor = monitor,
+                    onAddMac = { showAddScreen = true }
+                )
+            }
         }
     }
 }
 
+// ---------------------------------------------------------------------------
+// Main screen: paired Macs first, "Add Mac" opens the pairing flow.
+// ---------------------------------------------------------------------------
+
 @Composable
-private fun PairingScreen(monitor: DeviceMonitor) {
+private fun PairedMacsScreen(monitor: DeviceMonitor, onAddMac: () -> Unit) {
     val context = LocalContext.current
     val store = remember { SettingsStore(context.applicationContext) }
     val deviceStore = remember { PairedDeviceStore(context.applicationContext) }
-    val relay = remember { RelayClient() }
     val scope = rememberCoroutineScope()
-    val focusManager = LocalFocusManager.current
-    val pagerState = rememberPagerState(initialPage = PAGE_SCAN_QR) { PAGE_COUNT }
 
-    var settings by remember { mutableStateOf(store.read()) }
-    var status by remember { mutableStateOf("Ready to pair with your Mac.") }
     var devices by remember { mutableStateOf(deviceStore.devices()) }
+    var activeId by remember { mutableStateOf(deviceStore.activeId()) }
     val connection by monitor.state.collectAsState()
 
-    // Re-read permission state whenever the screen comes back to the foreground
-    // (e.g. after returning from system permission settings).
     var permissionsTick by remember { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) permissionsTick = !permissionsTick
+            if (event == Lifecycle.Event.ON_RESUME) {
+                permissionsTick = !permissionsTick
+                devices = deviceStore.devices()
+                activeId = deviceStore.activeId()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -130,36 +150,209 @@ private fun PairingScreen(monitor: DeviceMonitor) {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissionsTick = !permissionsTick }
 
+    fun refresh() {
+        devices = deviceStore.devices()
+        activeId = deviceStore.activeId()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .systemBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            "CodeBridge",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text("Android receives codes. Mac copies them.")
+
+        Text(
+            text = when (val state = connection) {
+                is DeviceMonitor.State.Connected -> "Connected to ${state.name} (${state.host})"
+                is DeviceMonitor.State.NoneReachable -> "Paired Mac not reachable on this Wi-Fi."
+                DeviceMonitor.State.Checking -> "Looking for a paired Mac…"
+                DeviceMonitor.State.NoDevices -> "No Macs paired yet."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (connection is DeviceMonitor.State.Connected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
+
+        if (devices.isEmpty()) {
+            Text(
+                "Pair your first Mac to get started — scan the QR code shown in its menu bar Settings.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(modifier = Modifier.fillMaxWidth(), onClick = onAddMac) {
+                Text("Add Mac")
+            }
+        } else {
+            Text("Paired Macs", style = MaterialTheme.typography.titleMedium)
+            devices.forEach { device ->
+                PairedMacRow(
+                    device = device,
+                    isActive = device.id == activeId,
+                    isConnected = connection is DeviceMonitor.State.Connected &&
+                        (connection as DeviceMonitor.State.Connected).host == device.host,
+                    onClick = {
+                        deviceStore.activate(device)
+                        store.read()
+                        refresh()
+                        monitor.checkNow()
+                    },
+                    onForget = {
+                        deviceStore.remove(device.id)
+                        refresh()
+                        monitor.checkNow()
+                    }
+                )
+            }
+
+            OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onAddMac) {
+                Text("Add Mac")
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Text("Permissions", style = MaterialTheme.typography.titleMedium)
+        if (smsGranted) {
+            Text(
+                "SMS permissions: granted. Codes will be forwarded automatically.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        } else {
+            Text(
+                "SMS permissions: missing. Grant them so codes can be forwarded automatically.",
+                style = MaterialTheme.typography.bodySmall
+            )
+            OutlinedButton(onClick = {
+                permissionLauncher.launch(
+                    arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS)
+                )
+            }) {
+                Text("Grant SMS Permissions")
+            }
+        }
+        Text(
+            "Some phones also need battery optimization disabled for reliable background delivery.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun PairedMacRow(
+    device: PairedMac,
+    isActive: Boolean,
+    isConnected: Boolean,
+    onClick: () -> Unit,
+    onForget: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (isActive) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                }
+            )
+            .border(
+                width = if (isActive) 1.dp else 0.dp,
+                color = if (isActive) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    Color.Transparent
+                },
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(
+                    if (isActive && isConnected) Color(0xFF4CAF50) else Color(0xFF9E9E9E)
+                )
+        )
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    device.name,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isActive) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                )
+                if (isActive) {
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        "Active",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Text(
+                "${device.host}:${device.port}",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isActive) {
+                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        }
+        TextButton(onClick = onForget) { Text("Forget") }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Add flow: swipe between Scan QR (default) and Manual Setup.
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun AddMacScreen(monitor: DeviceMonitor, onDone: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val pagerState = rememberPagerState(initialPage = PAGE_SCAN_QR) { PAGE_COUNT }
+
+    BackHandler { onDone() }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .systemBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(Modifier.padding(horizontal = 24.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onDone) { Text("Back") }
             Text(
-                "CodeBridge",
-                style = MaterialTheme.typography.headlineMedium,
+                "Add Mac",
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                "Android receives codes. Mac copies them.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = when (val state = connection) {
-                    is DeviceMonitor.State.Connected -> "Connected to ${state.name} (${state.host})"
-                    is DeviceMonitor.State.NoneReachable -> "Paired Mac not reachable on this Wi-Fi."
-                    DeviceMonitor.State.Checking -> "Looking for a paired Mac…"
-                    DeviceMonitor.State.NoDevices -> "Not paired yet — scan your Mac's QR code."
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (connection is DeviceMonitor.State.Connected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
             )
         }
 
@@ -177,105 +370,38 @@ private fun PairingScreen(monitor: DeviceMonitor) {
             when (page) {
                 PAGE_SCAN_QR -> ScanQrPage(
                     onPaired = {
-                        devices = deviceStore.devices()
                         monitor.checkNow()
+                        // Let the success overlay show, then return to the list.
+                        scope.launch {
+                            delay(1400)
+                            onDone()
+                        }
                     }
                 )
                 PAGE_MANUAL -> ManualSetupPage(
-                    settings = settings,
-                    onSettingsChange = { settings = it },
-                    status = status,
-                    onSave = {
-                        store.save(settings)
-                        focusManager.clearFocus()
-                        status = "Settings saved."
+                    onAdded = {
                         monitor.checkNow()
-                    },
-                    onSendTest = {
-                        focusManager.clearFocus()
-                        status = "Sending test code..."
-                        scope.launch {
-                            val result = withContext(Dispatchers.IO) { relay.sendTest(settings) }
-                            status = result.fold(
-                                onSuccess = { "Test code sent. Check your Mac clipboard." },
-                                onFailure = { "Send failed: ${it.message ?: "unknown error"}" }
-                            )
-                        }
+                        onDone()
                     }
                 )
             }
-        }
-
-        Column(
-            Modifier.padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (devices.isNotEmpty()) {
-                Text("Paired Macs", style = MaterialTheme.typography.titleMedium)
-                devices.forEach { device ->
-                    val active = connection is DeviceMonitor.State.Connected &&
-                        (connection as DeviceMonitor.State.Connected).host == device.host
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                if (active) "${device.name}  •  active" else device.name,
-                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal
-                            )
-                            Text(
-                                "${device.host}:${device.port}",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        TextButton(onClick = {
-                            deviceStore.activate(device)
-                            settings = store.read()
-                            monitor.checkNow()
-                        }) { Text("Use") }
-                        TextButton(onClick = {
-                            deviceStore.remove(device.id)
-                            devices = deviceStore.devices()
-                            monitor.checkNow()
-                        }) { Text("Forget") }
-                    }
-                }
-            }
-
-            Text("Permissions", style = MaterialTheme.typography.titleMedium)
-            if (smsGranted) {
-                Text(
-                    "SMS permissions: granted. Codes will be forwarded automatically.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            } else {
-                Text(
-                    "SMS permissions: missing. Grant them so codes can be forwarded automatically.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                OutlinedButton(onClick = {
-                    permissionLauncher.launch(
-                        arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS)
-                    )
-                }) {
-                    Text("Grant SMS Permissions")
-                }
-            }
-            Spacer(Modifier.height(8.dp))
         }
     }
 }
 
 @Composable
-private fun ManualSetupPage(
-    settings: CodeBridgeSettings,
-    onSettingsChange: (CodeBridgeSettings) -> Unit,
-    status: String,
-    onSave: () -> Unit,
-    onSendTest: () -> Unit
-) {
+private fun ManualSetupPage(onAdded: () -> Unit) {
+    val context = LocalContext.current
+    val store = remember { SettingsStore(context.applicationContext) }
+    val deviceStore = remember { PairedDeviceStore(context.applicationContext) }
+    val relay = remember { RelayClient() }
+    val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+
+    var settings by remember { mutableStateOf(store.read()) }
+    var status by remember { mutableStateOf("Enter your Mac's host, port, and token.") }
+    var adding by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -285,7 +411,7 @@ private fun ManualSetupPage(
     ) {
         OutlinedTextField(
             value = settings.host,
-            onValueChange = { onSettingsChange(settings.copy(host = it)) },
+            onValueChange = { settings = settings.copy(host = it) },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Mac host") },
             placeholder = { Text("192.168.1.8") },
@@ -294,7 +420,7 @@ private fun ManualSetupPage(
 
         OutlinedTextField(
             value = settings.port,
-            onValueChange = { onSettingsChange(settings.copy(port = it)) },
+            onValueChange = { settings = settings.copy(port = it) },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Port") },
             singleLine = true
@@ -302,7 +428,7 @@ private fun ManualSetupPage(
 
         OutlinedTextField(
             value = settings.token,
-            onValueChange = { onSettingsChange(settings.copy(token = it)) },
+            onValueChange = { settings = settings.copy(token = it) },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Token") },
             singleLine = true
@@ -322,18 +448,52 @@ private fun ManualSetupPage(
             }
             Switch(
                 checked = settings.forwardingEnabled,
-                onCheckedChange = { onSettingsChange(settings.copy(forwardingEnabled = it)) }
+                onCheckedChange = { settings = settings.copy(forwardingEnabled = it) }
             )
-        }
-
-        Button(modifier = Modifier.fillMaxWidth(), onClick = onSave) {
-            Text("Save")
         }
 
         Button(
             modifier = Modifier.fillMaxWidth(),
-            enabled = settings.isReady,
-            onClick = onSendTest
+            enabled = settings.isReady && !adding,
+            onClick = {
+                focusManager.clearFocus()
+                adding = true
+                status = "Adding ${settings.host}…"
+                scope.launch {
+                    val reachableName = withContext(Dispatchers.IO) {
+                        relay.ping(settings).getOrNull()
+                    }
+                    val device = PairedMac(
+                        id = PairedMac.makeId(settings.host, settings.port),
+                        name = reachableName ?: settings.host,
+                        host = settings.host,
+                        port = settings.port,
+                        token = settings.token
+                    )
+                    deviceStore.upsert(device)
+                    deviceStore.activate(device)
+                    store.save(settings)
+                    onAdded()
+                }
+            }
+        ) {
+            Text(if (adding) "Adding…" else "Add Mac")
+        }
+
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth(),
+            enabled = settings.isReady && !adding,
+            onClick = {
+                focusManager.clearFocus()
+                status = "Sending test code..."
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) { relay.sendTest(settings) }
+                    status = result.fold(
+                        onSuccess = { "Test code sent. Check your Mac clipboard." },
+                        onFailure = { "Send failed: ${it.message ?: "unknown error"}" }
+                    )
+                }
+            }
         ) {
             Text("Send Test Code")
         }

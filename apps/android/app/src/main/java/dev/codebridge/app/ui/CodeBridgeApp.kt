@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -48,7 +49,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -140,9 +140,6 @@ private fun PairedMacsScreen(monitor: DeviceMonitor, onAddMac: () -> Unit) {
     val connection by monitor.state.collectAsState()
 
     var permissionsTick by remember { mutableStateOf(false) }
-    var autostartState by remember { mutableStateOf(store.autostartConfirmed) }
-    var askAutostartOnResume by remember { mutableStateOf(false) }
-    var showAutostartDialog by remember { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -150,10 +147,6 @@ private fun PairedMacsScreen(monitor: DeviceMonitor, onAddMac: () -> Unit) {
                 permissionsTick = !permissionsTick
                 devices = deviceStore.devices()
                 activeId = deviceStore.activeId()
-                if (askAutostartOnResume) {
-                    askAutostartOnResume = false
-                    showAutostartDialog = true
-                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -288,35 +281,8 @@ private fun PairedMacsScreen(monitor: DeviceMonitor, onAddMac: () -> Unit) {
 
         PermissionStatusRow(
             title = "Auto-start",
-            granted = autostartState,
-            onFix = {
-                openAutoStartSettings(context)
-                askAutostartOnResume = true
-            }
-        )
-    }
-
-    if (showAutostartDialog) {
-        AlertDialog(
-            onDismissRequest = { showAutostartDialog = false },
-            title = { Text("Auto-start") },
-            text = {
-                Text("Is Auto-start enabled for CodeBridge in the system settings?")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    autostartState = true
-                    store.autostartConfirmed = true
-                    showAutostartDialog = false
-                }) { Text("Yes, enabled") }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    autostartState = false
-                    store.autostartConfirmed = false
-                    showAutostartDialog = false
-                }) { Text("Not yet") }
-            }
+            granted = null,
+            onFix = { openAutoStartSettings(context) }
         )
     }
 }
@@ -377,7 +343,10 @@ private fun PermissionStatusRow(
     }
 }
 
-/** Jumps to the OEM auto-start settings when one is installed; app details otherwise. */
+/**
+ * Jumps to the OEM auto-start settings when one is installed; the system
+ * Apps list otherwise (Auto-start lives under Settings → Apps on most ROMs).
+ */
 private fun openAutoStartSettings(context: Context) {
     val candidates = listOf(
         ComponentName(
@@ -409,12 +378,16 @@ private fun openAutoStartSettings(context: Context) {
         val intent = Intent().setComponent(component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (runCatching { context.startActivity(intent) }.isSuccess) return
     }
+
+    Toast.makeText(
+        context,
+        "Find CodeBridge under Settings → Apps and allow Auto-start",
+        Toast.LENGTH_LONG
+    ).show()
     runCatching {
         context.startActivity(
-            Intent(
-                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                Uri.parse("package:${context.packageName}")
-            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            Intent(Settings.ACTION_APPLICATION_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     }
 }

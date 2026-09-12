@@ -81,16 +81,16 @@ final class CodeToast {
 
         let icon = NSImageView()
         if let symbol = NSImage(
-            systemSymbolName: "doc.on.doc.fill",
+            systemSymbolName: "checkmark.circle.fill",
             accessibilityDescription: "Copied"
         ) {
             icon.symbolConfiguration = NSImage.SymbolConfiguration(
-                pointSize: 15,
+                pointSize: 16,
                 weight: .medium
             )
             icon.image = symbol
         }
-        icon.contentTintColor = .white
+        icon.contentTintColor = NSColor.systemGreen
 
         let prefix = NSTextField(labelWithString: "已复制")
         prefix.textColor = .white.withAlphaComponent(0.85)

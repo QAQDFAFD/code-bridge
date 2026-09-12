@@ -13,8 +13,39 @@ import Testing
     """
 
     let parsed = try HTTPCodeRequestParser.parse(Data(request.utf8), expectedToken: "secret")
-    #expect(parsed.payload.code == "106284")
-    #expect(parsed.payload.sender == "GitHub")
+    guard case .code(let codeRequest) = parsed else {
+        Issue.record("expected .code, got \(parsed)")
+        return
+    }
+    #expect(codeRequest.payload.code == "106284")
+    #expect(codeRequest.payload.sender == "GitHub")
+}
+
+@Test func parserAcceptsAuthorizedPingRequest() throws {
+    let request = """
+    GET /v1/ping HTTP/1.1\r
+    Host: 127.0.0.1\r
+    Authorization: Bearer secret\r
+    \r
+
+    """
+
+    let parsed = try HTTPCodeRequestParser.parse(Data(request.utf8), expectedToken: "secret")
+    #expect(parsed == .ping)
+}
+
+@Test func parserRejectsPingWithWrongToken() {
+    let request = """
+    GET /v1/ping HTTP/1.1\r
+    Host: 127.0.0.1\r
+    Authorization: Bearer wrong\r
+    \r
+
+    """
+
+    #expect(throws: CodeBridgeError.unauthorized) {
+        try HTTPCodeRequestParser.parse(Data(request.utf8), expectedToken: "secret")
+    }
 }
 
 @Test func parserRejectsInvalidToken() {
@@ -48,7 +79,11 @@ import Testing
     #expect(HTTPCodeRequestParser.isRequestComplete(full))
 
     let parsed = try HTTPCodeRequestParser.parse(full, expectedToken: "secret")
-    #expect(parsed.payload.code == "106284")
+    guard case .code(let codeRequest) = parsed else {
+        Issue.record("expected .code, got \(parsed)")
+        return
+    }
+    #expect(codeRequest.payload.code == "106284")
 }
 
 @Test func parserRejectsCodeThatFailsValidation() {

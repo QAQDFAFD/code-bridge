@@ -96,4 +96,41 @@ class RelayClientTest {
         assertTrue(result.exceptionOrNull() is IllegalStateException)
         assertEquals(0, server.requestCount)
     }
+
+    @Test
+    fun pingReturnsDeviceName() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"ok":true,"name":"Mac-mini"}"""))
+        server.start()
+
+        val result = client.ping(settingsFor())
+
+        assertTrue("expected success, got $result", result.isSuccess)
+        assertEquals("Mac-mini", result.getOrThrow())
+
+        val recorded = server.takeRequest()
+        assertEquals("GET", recorded.method)
+        assertEquals("/v1/ping", recorded.path)
+        assertEquals("Bearer secret", recorded.getHeader("Authorization"))
+    }
+
+    @Test
+    fun pingFailsOnUnauthorized() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"unauthorized"}"""))
+        server.start()
+
+        val result = client.ping(settingsFor(token = "wrong"))
+
+        assertTrue(result.isFailure)
+        assertEquals("Token rejected (HTTP 401).", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun pingFailsWithoutNetworkWhenSettingsIncomplete() {
+        val incomplete = CodeBridgeSettings(host = "", port = "47821", token = "secret")
+
+        val result = client.ping(incomplete)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is IllegalStateException)
+    }
 }

@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 final class SettingsStore {
@@ -25,5 +26,47 @@ final class SettingsStore {
             .map { _ in UInt8.random(in: .min ... .max, using: &generator) }
             .map { String(format: "%02x", $0) }
             .joined()
+    }
+
+    /// Short human-friendly name for this Mac, e.g. "Mac-mini".
+    static func deviceName() -> String {
+        let host = ProcessInfo.processInfo.hostName
+        return host.split(separator: ".").first.map(String.init) ?? host
+    }
+
+    /// All LAN IPv4 addresses (loopback excluded), used for pairing.
+    static func lanIPv4Addresses() -> [String] {
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else {
+            return []
+        }
+        defer { freeifaddrs(ifaddr) }
+
+        var addresses: [String] = []
+        var cursor: UnsafeMutablePointer<ifaddrs>? = first
+        while let current = cursor {
+            let interface = current.pointee
+            defer { cursor = interface.ifa_next }
+
+            guard interface.ifa_addr?.pointee.sa_family == UInt8(AF_INET) else { continue }
+            let name = String(cString: interface.ifa_name)
+            guard name != "lo0" else { continue }
+
+            var address = interface.ifa_addr!.pointee
+            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            let result = getnameinfo(
+                &address,
+                socklen_t(interface.ifa_addr!.pointee.sa_len),
+                &host,
+                socklen_t(NI_MAXHOST),
+                nil,
+                0,
+                NI_NUMERICHOST
+            )
+            if result == 0 {
+                addresses.append(String(cString: host))
+            }
+        }
+        return addresses
     }
 }

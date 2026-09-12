@@ -80,13 +80,43 @@ struct CodeHTTPServerEndToEndTests {
         #expect(events.events.first?.sender == "Alipay")
     }
 
+    @Test func pingReturns200WithDeviceName() async throws {
+        let (server, port) = try await startServer(nameProvider: { "Test-Mac" }) { _ in }
+        defer { server.stop() }
+
+        let response = try await performRequest(
+            port: port,
+            method: "GET",
+            path: "/v1/ping",
+            authorization: "Bearer \(token)"
+        )
+
+        #expect(response.contains("200 OK"))
+        #expect(response.contains(#""name":"Test-Mac""#))
+    }
+
+    @Test func pingRejectsWrongToken() async throws {
+        let (server, port) = try await startServer { _ in }
+        defer { server.stop() }
+
+        let response = try await performRequest(
+            port: port,
+            method: "GET",
+            path: "/v1/ping",
+            authorization: "Bearer wrong"
+        )
+
+        #expect(response.contains("401 Unauthorized"))
+    }
+
     // MARK: - Helpers
 
     private func startServer(
+        nameProvider: @escaping @Sendable () -> String = { "Mac" },
         onEvent: @escaping @Sendable (CodeEvent) -> Void
     ) async throws -> (server: CodeHTTPServer, port: UInt16) {
         let port = UInt16.random(in: 48_000...48_999)
-        let server = CodeHTTPServer(port: port, tokenProvider: { token })
+        let server = CodeHTTPServer(port: port, tokenProvider: { token }, nameProvider: nameProvider)
         server.onReceive = onEvent
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -112,14 +142,18 @@ struct CodeHTTPServerEndToEndTests {
 
     private func performRequest(
         port: UInt16,
+        method: String = "POST",
+        path: String = "/v1/codes",
         authorization: String,
-        body: String,
+        body: String = "",
         splitDelay: TimeInterval? = nil
     ) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             SingleRequestClient(
                 continuation: continuation,
                 port: port,
+                method: method,
+                path: path,
                 authorization: authorization,
                 body: body,
                 splitDelay: splitDelay
@@ -136,12 +170,15 @@ private final class SingleRequestClient: @unchecked Sendable {
     private let connection: NWConnection
     private let authorization: String
     private let body: String
+    private let requestHead: String
     private let splitDelay: TimeInterval?
     private var buffer = Data()
 
     init(
         continuation: CheckedContinuation<String, Error>,
         port: UInt16,
+        method: String,
+        path: String,
         authorization: String,
         body: String,
         splitDelay: TimeInterval?,
@@ -156,6 +193,16 @@ private final class SingleRequestClient: @unchecked Sendable {
         self.authorization = authorization
         self.body = body
         self.splitDelay = splitDelay
+        self.requestHead = """
+        \(method) \(path) HTTP/1.1\r
+        Host: 127.0.0.1\r
+        Authorization: \(authorization)\r
+        Content-Type: application/json\r
+        Content-Length: \(body.utf8.count)\r
+        Connection: close\r
+        \r
+
+        """
 
         // The client keeps itself alive through the connection's handler and
         // these closures; teardown() breaks the cycle once a response (or a
@@ -178,24 +225,13 @@ private final class SingleRequestClient: @unchecked Sendable {
     }
 
     private func sendRequest() {
-        let head = """
-        POST /v1/codes HTTP/1.1\r
-        Host: 127.0.0.1\r
-        Authorization: \(authorization)\r
-        Content-Type: application/json\r
-        Content-Length: \(body.utf8.count)\r
-        Connection: close\r
-        \r
-
-        """
-
         if let splitDelay {
-            connection.send(content: Data(head.utf8), completion: .contentProcessed { _ in })
+            connection.send(content: Data(requestHead.utf8), completion: .contentProcessed { _ in })
             queue.asyncAfter(deadline: .now() + splitDelay) {
                 self.connection.send(content: Data(self.body.utf8), completion: .contentProcessed { _ in })
             }
         } else {
-            connection.send(content: Data((head + body).utf8), completion: .contentProcessed { _ in })
+            connection.send(content: Data((requestHead + body).utf8), completion: .contentProcessed { _ in })
         }
     }
 

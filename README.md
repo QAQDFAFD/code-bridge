@@ -37,7 +37,7 @@ cd apps/macos
 swift run CodeBridgeMac
 ```
 
-A **random pairing token is generated on first launch**. Open the menu bar item → **Settings…** to see the port and token — you will type them into the Android app.
+A **random pairing token is generated on first launch**. Open the menu bar item → **Settings…** and a **pairing QR code** is shown (encoding the Mac's name, LAN address, port, and token). The Android app can scan it to pair — manual entry of the same values also works.
 
 ### Android
 
@@ -46,8 +46,9 @@ Requirements: Android Studio, a recent Android SDK, JDK 17+, and a physical Andr
 Open `apps/android` in Android Studio and run the `app` module on the phone. Then:
 
 1. Grant SMS permissions when asked (some phones also need battery optimization disabled for reliable background delivery).
-2. Fill in the Mac's LAN address (e.g. `192.168.1.8`), port, and the token from the Mac menu bar.
-3. Tap **Send Test Code** — the code should land on your Mac clipboard.
+2. Tap **Scan QR Code to Pair** and point the camera at the QR code in the Mac's Settings — manual host/port/token entry is still available under "Manual setup".
+3. Once paired, the app re-connects automatically whenever the phone and Mac are on the same Wi-Fi (it probes paired Macs on every network change).
+4. Tap **Send Test Code** — the code should land on your Mac clipboard.
 
 Note: running the Mac app via `swift run` is not a proper `.app` bundle, so system notifications are skipped in dev mode; clipboard, menu bar history, and the server all work.
 

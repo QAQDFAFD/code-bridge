@@ -37,7 +37,7 @@ cd apps/macos
 swift run CodeBridgeMac
 ```
 
-**首次启动会自动生成随机配对 token**。点菜单栏图标 → **Settings…** 可以查看端口和 token，把它们填到 Android 应用里即可。
+**首次启动会自动生成随机配对 token**。点菜单栏图标 → **Settings…** 会显示**配对二维码**（内容包含 Mac 名称、局域网地址、端口和 token），Android 端扫码即可配对；手动输入这些值也可以。
 
 ### Android
 
@@ -46,8 +46,9 @@ swift run CodeBridgeMac
 用 Android Studio 打开 `apps/android`，运行 `app` 模块到真机，然后：
 
 1. 按提示授予短信权限（部分手机还需要关闭电池优化，后台接收才稳定）。
-2. 填写 Mac 的局域网地址（如 `192.168.1.8`）、端口和 Mac 菜单栏显示的 token。
-3. 点 **Send Test Code**，验证码应该出现在 Mac 剪贴板。
+2. 点 **Scan QR Code to Pair**，对准 Mac 设置弹窗里的二维码即可完成配对；"Manual setup" 里仍可手动填地址/端口/token。
+3. 配对一次后，只要手机和 Mac 连到同一个 Wi-Fi，App 会自动重新连接（每次网络变化都会探测已配对的 Mac）。
+4. 点 **Send Test Code**，验证码应该出现在 Mac 剪贴板。
 
 注意：`swift run` 直接运行时不是标准 `.app` bundle，开发态会跳过系统通知，但接收验证码、复制剪贴板和菜单栏历史都正常。
 

@@ -4,6 +4,11 @@ public struct ParsedCodeRequest: Equatable, Sendable {
     public let payload: IncomingCodePayload
 }
 
+public enum ParsedRequest: Equatable, Sendable {
+    case code(ParsedCodeRequest)
+    case ping
+}
+
 public enum HTTPCodeRequestParser {
     /// Returns true when `data` holds a full HTTP request: the blank line that
     /// ends the header block is present, and the body reaches Content-Length bytes.
@@ -30,7 +35,7 @@ public enum HTTPCodeRequestParser {
         return data.count - headerEnd.upperBound >= contentLength
     }
 
-    public static func parse(_ data: Data, expectedToken: String) throws -> ParsedCodeRequest {
+    public static func parse(_ data: Data, expectedToken: String) throws -> ParsedRequest {
         guard let raw = String(data: data, encoding: .utf8) else {
             throw CodeBridgeError.invalidRequest
         }
@@ -41,8 +46,13 @@ public enum HTTPCodeRequestParser {
         }
 
         let headerLines = sections[0].components(separatedBy: "\r\n")
-        guard let requestLine = headerLines.first,
-              requestLine.hasPrefix("POST /v1/codes ") else {
+        guard let requestLine = headerLines.first else {
+            throw CodeBridgeError.invalidRequest
+        }
+
+        let isPing = requestLine.hasPrefix("GET /v1/ping ")
+        let isCode = requestLine.hasPrefix("POST /v1/codes ")
+        guard isPing || isCode else {
             throw CodeBridgeError.invalidRequest
         }
 
@@ -59,6 +69,10 @@ public enum HTTPCodeRequestParser {
             throw CodeBridgeError.unauthorized
         }
 
+        if isPing {
+            return .ping
+        }
+
         let body = sections.dropFirst().joined(separator: "\r\n\r\n")
         guard let bodyData = body.data(using: .utf8) else {
             throw CodeBridgeError.invalidJSON
@@ -70,7 +84,7 @@ public enum HTTPCodeRequestParser {
         do {
             let payload = try decoder.decode(IncomingCodePayload.self, from: bodyData)
             _ = try payload.toEvent()
-            return ParsedCodeRequest(payload: payload)
+            return .code(ParsedCodeRequest(payload: payload))
         } catch CodeBridgeError.invalidCode {
             throw CodeBridgeError.invalidCode
         } catch {
@@ -78,4 +92,3 @@ public enum HTTPCodeRequestParser {
         }
     }
 }
-

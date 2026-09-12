@@ -17,6 +17,22 @@ Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
+## Reachability probe
+
+```text
+GET /v1/ping
+Authorization: Bearer <token>
+```
+
+The Android app uses this to detect a paired Mac on the current network
+(auto-connect) and to validate a QR pairing before saving it.
+
+```text
+200 OK   {"ok":true,"name":"<device name>"}
+```
+
+Wrong or missing token returns `401` like `/v1/codes`.
+
 ## Payload
 
 ```json

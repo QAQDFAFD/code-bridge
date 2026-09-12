@@ -64,6 +64,37 @@ class RelayClient(
         )
     }
 
+    /** Reachability probe: `GET /v1/ping` with the pairing token. Returns the Mac's name. */
+    fun ping(settings: CodeBridgeSettings): Result<String> {
+        if (!settings.isReady) {
+            return Result.failure(IllegalStateException("Mac connection is not configured."))
+        }
+
+        val request = Request.Builder()
+            .url("http://${settings.host}:${settings.port}/v1/ping")
+            .header("Authorization", "Bearer ${settings.token}")
+            .get()
+            .build()
+
+        return try {
+            pingClient.newCall(request).execute().use { response ->
+                when {
+                    response.isSuccessful -> {
+                        val body = response.body?.string().orEmpty()
+                        val name = runCatching { JSONObject(body).optString("name") }.getOrNull()
+                        Result.success(name?.ifBlank { "Mac" } ?: "Mac")
+                    }
+                    response.code == 401 -> Result.failure(IOException("Token rejected (HTTP 401)."))
+                    else -> Result.failure(IOException("CodeBridge Mac returned HTTP ${response.code}."))
+                }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
     companion object {
         // The SMS broadcast receiver has a short goAsync() window, so keep
         // timeouts well below 10 seconds instead of OkHttp's 10s defaults.
@@ -71,6 +102,13 @@ class RelayClient(
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(5, TimeUnit.SECONDS)
             .callTimeout(8, TimeUnit.SECONDS)
+            .build()
+
+        // Short-timeout client for LAN reachability probes.
+        private val pingClient: OkHttpClient = OkHttpClient.Builder()
+            .connectTimeout(2, TimeUnit.SECONDS)
+            .readTimeout(2, TimeUnit.SECONDS)
+            .callTimeout(3, TimeUnit.SECONDS)
             .build()
     }
 }

@@ -4,7 +4,7 @@ import Foundation
 import UserNotifications
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let settings = SettingsStore()
     private var history = CodeHistory()
@@ -32,7 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startServer() {
         let token = settings.token
-        server = CodeHTTPServer(port: settings.port, tokenProvider: { token })
+        let name = SettingsStore.deviceName()
+        server = CodeHTTPServer(port: settings.port, tokenProvider: { token }, nameProvider: { name })
         server?.onReceive = { [weak self] event in
             Task { @MainActor in
                 self?.handle(event)
@@ -113,7 +114,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
 
+        menu.delegate = self
         statusItem.menu = menu
+    }
+
+    /// Recomputes relative timestamps every time the menu is shown, instead of
+    /// showing the time frozen at the last rebuild.
+    func menuWillOpen(_ menu: NSMenu) {
+        for item in menu.items {
+            guard let event = item.representedObject as? CodeEvent else { continue }
+            item.title = "\(event.sender)    \(event.code)    \(relativeTime(event.receivedAt))"
+        }
     }
 
     @objc private func copyHistoryItem(_ sender: NSMenuItem) {
@@ -133,16 +144,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
-        let alert = NSAlert()
-        alert.messageText = "CodeBridge Settings"
-        alert.informativeText = """
-        Host: this Mac on your local network
-        Port: \(settings.port)
-        Token: \(settings.token)
+        let addresses = SettingsStore.lanIPv4Addresses()
+        let host = addresses.first ?? "127.0.0.1"
+        let payload = PairingPayload(
+            name: SettingsStore.deviceName(),
+            host: host,
+            port: settings.port,
+            token: settings.token
+        )
 
-        Use these values in the Android app. The token is stored locally for the MVP.
+        let alert = NSAlert()
+        alert.messageText = "Pair with the Android app"
+        alert.informativeText = """
+        Scan this QR code in CodeBridge for Android, or enter the values manually.
+
+        Device: \(payload.name)
+        Address: \(addresses.isEmpty ? "\(host) (no LAN IPv4 found)" : addresses.joined(separator: ", ")):\(payload.port)
+        Token: \(payload.token)
+
+        The Android app auto-connects to a paired Mac whenever both are on the same Wi-Fi.
         """
-        alert.addButton(withTitle: "OK")
+        if let json = payload.jsonString, let qr = QRCodeRenderer.image(for: json) {
+            let view = NSImageView(frame: NSRect(x: 0, y: 0, width: 220, height: 220))
+            view.image = qr
+            alert.accessoryView = view
+        }
+        alert.addButton(withTitle: "Done")
         alert.runModal()
     }
 

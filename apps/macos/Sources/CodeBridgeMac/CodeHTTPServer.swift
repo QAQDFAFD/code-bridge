@@ -17,12 +17,18 @@ final class CodeHTTPServer: @unchecked Sendable {
 
     private let port: UInt16
     private let tokenProvider: @Sendable () -> String
+    private let nameProvider: @Sendable () -> String
     private let queue = DispatchQueue(label: "dev.codebridge.http-server", qos: .userInitiated)
     private var listener: NWListener?
 
-    init(port: UInt16, tokenProvider: @escaping @Sendable () -> String) {
+    init(
+        port: UInt16,
+        tokenProvider: @escaping @Sendable () -> String,
+        nameProvider: @escaping @Sendable () -> String = { "Mac" }
+    ) {
         self.port = port
         self.tokenProvider = tokenProvider
+        self.nameProvider = nameProvider
     }
 
     func start() {
@@ -113,9 +119,14 @@ final class CodeHTTPServer: @unchecked Sendable {
     private func process(_ data: Data) -> HTTPResponse {
         do {
             let parsed = try HTTPCodeRequestParser.parse(data, expectedToken: tokenProvider())
-            let event = try parsed.payload.toEvent()
-            onReceive?(event)
-            return .accepted
+            switch parsed {
+            case .ping:
+                return .pong(name: nameProvider())
+            case .code(let request):
+                let event = try request.payload.toEvent()
+                onReceive?(event)
+                return .accepted
+            }
         } catch CodeBridgeError.unauthorized {
             return .unauthorized
         } catch {
@@ -128,31 +139,39 @@ private enum HTTPResponse {
     case accepted
     case badRequest
     case unauthorized
+    case pong(name: String)
 
     var data: Data {
         let status: String
-        let body: String
+        let body: Data
 
         switch self {
         case .accepted:
             status = "202 Accepted"
-            body = #"{"ok":true}"#
+            body = Data(#"{"ok":true}"#.utf8)
         case .badRequest:
             status = "400 Bad Request"
-            body = #"{"error":"bad_request"}"#
+            body = Data(#"{"error":"bad_request"}"#.utf8)
         case .unauthorized:
             status = "401 Unauthorized"
-            body = #"{"error":"unauthorized"}"#
+            body = Data(#"{"error":"unauthorized"}"#.utf8)
+        case .pong(let name):
+            status = "200 OK"
+            let payload = (try? JSONSerialization.data(withJSONObject: ["ok": true, "name": name]))
+                ?? Data(#"{"ok":true}"#.utf8)
+            body = payload
         }
 
         let raw = """
         HTTP/1.1 \(status)\r
         Content-Type: application/json\r
-        Content-Length: \(body.utf8.count)\r
+        Content-Length: \(body.count)\r
         Connection: close\r
         \r
-        \(body)
+
         """
-        return Data(raw.utf8)
+        var response = Data(raw.utf8)
+        response.append(body)
+        return response
     }
 }

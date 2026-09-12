@@ -393,7 +393,7 @@ private fun openAutoStartSettings(context: Context) {
     ).show()
     runCatching {
         context.startActivity(
-            Intent(Settings.ACTION_APPLICATION_SETTINGS)
+            Intent(Settings.ACTION_SETTINGS)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     }

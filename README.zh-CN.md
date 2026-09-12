@@ -94,6 +94,15 @@ scripts/
 .github/workflows/    CI（Swift 测试 + Android 单元测试）
 ```
 
+## 应用图标
+
+Android 启动图标位于 `apps/android/app/src/main/res/mipmap-*`。源图（`cb.png`）被拆成自适应图标的两个图层，启动器可按设备形状任意遮罩：
+
+- **background（背景层）**：从源图取样的蓝色渐变（`#30A9FD → #0863FD`），全出血，108–432px 五档密度
+- **foreground（前景层）**：仅白色图案（已去除原始外框），缩放到图层宽度的 46%，保证在启动器安全区内
+
+传统 `ic_launcher.png`（48–192px 五档）带圆形透明遮罩，供 API 26 以下的启动器使用。更换源图后，按相同布局用 ImageMagick 重新生成分层即可。
+
 ## 开发
 
 ```bash

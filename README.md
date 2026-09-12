@@ -94,6 +94,19 @@ scripts/
 .github/workflows/    CI (Swift tests + Android unit tests)
 ```
 
+## App Icon
+
+The Android launcher icon lives under `apps/android/app/src/main/res/mipmap-*`. The
+source artwork (`cb.png`) is split into two adaptive-icon layers so launchers can
+mask it into any shape:
+
+- **background** — a blue gradient (`#30A9FD → #0863FD`) sampled from the artwork, full-bleed at 108–432 px
+- **foreground** — the white glyph only (isolated from its outer frame), scaled to 46% of the layer so it stays inside the launcher safe zone
+
+Legacy `ic_launcher.png` densities (48–192 px) carry a circular alpha mask for
+pre-API-26 launchers. To regenerate after changing the artwork, rebuild the
+layers with ImageMagick following the same layout.
+
 ## Development
 
 ```bash

@@ -40,5 +40,29 @@ class OtpExtractorTest {
         val otp = OtpExtractor.extract("Your code is A1B2C3. Do not share it.")
         assertEquals("A1B2C3", otp?.code)
     }
+
+    @Test
+    fun extractsShortChineseCodeWithPunctuation() {
+        val otp = OtpExtractor.extract("验证码：5821，请勿泄露给他人。")
+        assertEquals("5821", otp?.code)
+    }
+
+    @Test
+    fun assignsHighConfidenceWhenCodeIsNextToKeyword() {
+        val otp = OtpExtractor.extract("【支付宝】您的验证码是 482913，5分钟内有效。")
+        assertEquals(0.98, otp!!.confidence, 1e-9)
+    }
+
+    @Test
+    fun assignsLowerConfidenceWithoutAnyKeyword() {
+        val otp = OtpExtractor.extract("Your flight BA1234 departs soon.")
+        assertEquals("BA1234", otp?.code)
+        assertEquals(0.55, otp!!.confidence, 1e-9)
+    }
+
+    @Test
+    fun returnsNullForBlankMessage() {
+        assertNull(OtpExtractor.extract("   "))
+    }
 }
 

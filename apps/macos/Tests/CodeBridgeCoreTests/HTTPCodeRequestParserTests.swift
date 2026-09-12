@@ -66,3 +66,75 @@ import Testing
     }
 }
 
+@Test func parserRejectsMissingAuthorizationHeader() {
+    let request = """
+    POST /v1/codes HTTP/1.1\r
+    Host: 127.0.0.1\r
+    Content-Type: application/json\r
+    \r
+    {"code":"106284"}
+    """
+
+    #expect(throws: CodeBridgeError.unauthorized) {
+        try HTTPCodeRequestParser.parse(Data(request.utf8), expectedToken: "secret")
+    }
+}
+
+@Test func parserRejectsWrongPath() {
+    let request = """
+    POST /v1/other HTTP/1.1\r
+    Host: 127.0.0.1\r
+    Authorization: Bearer secret\r
+    \r
+    {"code":"106284"}
+    """
+
+    #expect(throws: CodeBridgeError.invalidRequest) {
+        try HTTPCodeRequestParser.parse(Data(request.utf8), expectedToken: "secret")
+    }
+}
+
+@Test func parserRejectsNonPostMethod() {
+    let request = """
+    GET /v1/codes HTTP/1.1\r
+    Host: 127.0.0.1\r
+    Authorization: Bearer secret\r
+    \r
+    {"code":"106284"}
+    """
+
+    #expect(throws: CodeBridgeError.invalidRequest) {
+        try HTTPCodeRequestParser.parse(Data(request.utf8), expectedToken: "secret")
+    }
+}
+
+@Test func parserRejectsMalformedJSONBody() {
+    let request = """
+    POST /v1/codes HTTP/1.1\r
+    Host: 127.0.0.1\r
+    Authorization: Bearer secret\r
+    Content-Type: application/json\r
+    \r
+    not-json
+    """
+
+    #expect(throws: CodeBridgeError.invalidJSON) {
+        try HTTPCodeRequestParser.parse(Data(request.utf8), expectedToken: "secret")
+    }
+}
+
+@Test func requestWithoutBodyIsCompleteOnceHeadersEnd() {
+    let headersOnly = """
+    POST /v1/codes HTTP/1.1\r
+    Host: 127.0.0.1\r
+    Authorization: Bearer secret\r
+    \r
+
+    """
+    let partialHeader = String(headersOnly.prefix(20))
+
+    #expect(HTTPCodeRequestParser.isRequestComplete(Data(headersOnly.utf8)))
+    #expect(!HTTPCodeRequestParser.isRequestComplete(Data(partialHeader.utf8)))
+    #expect(!HTTPCodeRequestParser.isRequestComplete(Data()))
+}
+

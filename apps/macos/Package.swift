@@ -20,6 +20,10 @@ let package = Package(
         .testTarget(
             name: "CodeBridgeCoreTests",
             dependencies: ["CodeBridgeCore"]
+        ),
+        .testTarget(
+            name: "CodeBridgeMacTests",
+            dependencies: ["CodeBridgeMac", "CodeBridgeCore"]
         )
     ]
 )

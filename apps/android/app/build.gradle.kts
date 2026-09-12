@@ -49,4 +49,8 @@ dependencies {
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
+    // MockWebServer drives RelayClient against a real local HTTP server;
+    // the real org.json artifact replaces Android's "not mocked" stubs in JVM tests.
+    testImplementation(libs.mockwebserver)
+    testImplementation(libs.org.json)
 }

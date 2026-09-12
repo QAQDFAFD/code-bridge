@@ -606,7 +606,7 @@ private fun ScanQrPage(onPaired: () -> Unit) {
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.TopCenter
         ) {
             Box(
                 modifier = Modifier

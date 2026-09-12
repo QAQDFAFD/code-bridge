@@ -47,7 +47,7 @@ Open `apps/android` in Android Studio and run the `app` module on the phone. The
 
 1. Grant SMS permissions when asked (some phones also need battery optimization disabled for reliable background delivery).
 2. Tap **Scan QR Code to Pair** and point the camera at the QR code in the Mac's Settings — manual host/port/token entry is still available under "Manual setup".
-3. Once paired, the app re-connects automatically whenever the phone and Mac are on the same Wi-Fi (it probes paired Macs on every network change).
+3. Once paired, the app re-connects automatically whenever the phone and Mac are on the same Wi-Fi. This works in the background too: SMS forwarding comes from a system broadcast receiver, and a WorkManager job re-probes paired Macs on every network change — you don't need to open the app. On aggressive OEM ROMs (OPPO/OnePlus/Xiaomi…), disable battery optimization and allow Auto-start for reliable background delivery.
 4. Tap **Send Test Code** — the code should land on your Mac clipboard.
 
 Note: running the Mac app via `swift run` is not a proper `.app` bundle, so system notifications are skipped in dev mode; clipboard, menu bar history, and the server all work.

@@ -5,7 +5,6 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
-import dev.codebridge.app.data.CodeBridgeSettings
 import dev.codebridge.app.data.PairedDeviceStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,9 +16,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Watches connectivity and picks the first paired Mac that answers a ping.
- * This gives "auto-connect when I'm back home": whenever the phone joins a
- * network, paired Macs on that network become the active receiver again.
+ * Foreground counterpart of [DeviceProbe]: keeps the UI connection state fresh
+ * while the app is visible. Background auto-connect is handled by the
+ * WorkManager chain, and SMS forwarding works from the broadcast receiver
+ * regardless of this monitor.
  */
 class DeviceMonitor(
     context: Context,
@@ -69,21 +69,12 @@ class DeviceMonitor(
         scope.launch {
             try {
                 val devices = store.devices()
-                _state.value = when {
-                    devices.isEmpty() -> State.NoDevices
-                    else -> State.Checking
-                }
+                _state.value = if (devices.isEmpty()) State.NoDevices else State.Checking
 
-                val reachable = devices.firstOrNull { device ->
-                    relay.ping(CodeBridgeSettings(host = device.host, port = device.port, token = device.token))
-                        .isSuccess
-                }
+                val reachable = DeviceProbe.probeAndActivate(appContext, store, relay)
 
                 _state.value = when {
-                    reachable != null -> {
-                        store.activate(reachable)
-                        State.Connected(name = reachable.name, host = reachable.host)
-                    }
+                    reachable != null -> State.Connected(name = reachable.name, host = reachable.host)
                     devices.isNotEmpty() -> State.NoneReachable(devices.size)
                     else -> State.NoDevices
                 }

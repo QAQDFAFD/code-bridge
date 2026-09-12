@@ -2,8 +2,12 @@ package dev.codebridge.app.ui
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.PowerManager
 import android.os.SystemClock
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -147,6 +151,10 @@ private fun PairedMacsScreen(monitor: DeviceMonitor, onAddMac: () -> Unit) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val smsGranted = remember(permissionsTick) { hasSmsPermissions(context) }
+    val ignoringBatteryOptimizations = remember(permissionsTick) {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        powerManager.isIgnoringBatteryOptimizations(context.packageName)
+    }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissionsTick = !permissionsTick }
@@ -244,6 +252,36 @@ private fun PairedMacsScreen(monitor: DeviceMonitor, onAddMac: () -> Unit) {
         }
         Text(
             "Some phones also need battery optimization disabled for reliable background delivery.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (!ignoringBatteryOptimizations) {
+            Text(
+                "Battery optimization is still on — the system may kill CodeBridge in the background and codes won't be forwarded.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+            OutlinedButton(onClick = {
+                runCatching {
+                    context.startActivity(
+                        Intent(
+                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                            Uri.parse("package:${context.packageName}")
+                        )
+                    )
+                }
+            }) {
+                Text("Disable Battery Optimization")
+            }
+        } else {
+            Text(
+                "Battery optimization: disabled. Background forwarding is allowed.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            "On OPPO/OnePlus/Xiaomi phones, also enable Auto-start for CodeBridge in system settings.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

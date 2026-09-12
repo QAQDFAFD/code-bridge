@@ -54,6 +54,9 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation(libs.zxing.core)
 
+    // Background auto-connect: probes paired Macs whenever the network changes
+    implementation(libs.androidx.work.runtime)
+
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
     // MockWebServer drives RelayClient against a real local HTTP server;

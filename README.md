@@ -9,6 +9,7 @@ When your Android phone receives a verification code, CodeBridge sends it to you
 ## Features
 
 - **SMS → clipboard in about a second** on a local network: the Android app parses the OTP from incoming SMS and POSTs it to the Mac, which copies it and notifies you.
+- **Copy toast on the Mac**: every copied code pops a floating “已复制 &lt;code&gt;” toast with a green checkmark at the top of the screen — instant visual confirmation that works even in dev runs, where system notifications are unavailable.
 - **QR pairing**: the Mac menu bar shows a QR code encoding its name, LAN address, port, and token; scan it with the phone to pair. Manual entry also works.
 - **Multi-Mac support**: pair several Macs; the active receiver is highlighted and one tap switches between them.
 - **Auto-connect**: whenever the phone joins a network (e.g. you get home), paired Macs are probed and the reachable one becomes active — in the background too, no app launch needed.
@@ -20,7 +21,7 @@ When your Android phone receives a verification code, CodeBridge sends it to you
 1. The Mac menu bar app runs a small token-authenticated HTTP server (default port `47821`) on your LAN.
 2. The Android app scans the pairing QR (or enters host/port/token), verifies reachability with `GET /v1/ping`, and stores the Mac.
 3. On incoming SMS, the phone extracts the OTP ([OtpExtractor](apps/android/app/src/main/java/dev/codebridge/app/sms/OtpExtractor.kt)) and POSTs it to the active Mac.
-4. The Mac validates the request, copies the code to the clipboard, posts a notification, and prepends it to the menu bar history (relative timestamps refresh every time you open the menu).
+4. The Mac validates the request, copies the code to the clipboard, shows a floating “已复制 &lt;code&gt;” toast, posts a notification (when bundled as a real app), and prepends the code to the menu bar history (relative timestamps refresh every time you open the menu).
 
 The wire protocol is documented in [`docs/protocol.md`](docs/protocol.md).
 

@@ -151,12 +151,19 @@ private fun PairedMacsScreen(monitor: DeviceMonitor, onAddMac: () -> Unit) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val smsGranted = remember(permissionsTick) { hasSmsPermissions(context) }
+    val cameraGranted = remember(permissionsTick) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+    }
     val ignoringBatteryOptimizations = remember(permissionsTick) {
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         powerManager.isIgnoringBatteryOptimizations(context.packageName)
     }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissionsTick = !permissionsTick }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
     ) { permissionsTick = !permissionsTick }
 
     fun refresh() {
@@ -232,58 +239,111 @@ private fun PairedMacsScreen(monitor: DeviceMonitor, onAddMac: () -> Unit) {
 
         Spacer(Modifier.height(8.dp))
         Text("Permissions", style = MaterialTheme.typography.titleMedium)
-        if (smsGranted) {
-            Text(
-                "SMS permissions: granted. Codes will be forwarded automatically.",
-                style = MaterialTheme.typography.bodySmall
-            )
-        } else {
-            Text(
-                "SMS permissions: missing. Grant them so codes can be forwarded automatically.",
-                style = MaterialTheme.typography.bodySmall
-            )
-            OutlinedButton(onClick = {
-                permissionLauncher.launch(
-                    arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS)
-                )
-            }) {
-                Text("Grant SMS Permissions")
-            }
-        }
         Text(
-            "Some phones also need battery optimization disabled for reliable background delivery.",
+            "Tap a row with a red badge to grant it.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        if (!ignoringBatteryOptimizations) {
-            Text(
-                "Battery optimization is still on — the system may kill CodeBridge in the background and codes won't be forwarded.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
-            )
-            OutlinedButton(onClick = {
-                runCatching {
-                    context.startActivity(
-                        Intent(
-                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                            Uri.parse("package:${context.packageName}")
-                        )
+
+        PermissionStatusRow(
+            title = "SMS access",
+            description = "Receive and forward verification codes",
+            granted = smsGranted,
+            onFix = if (smsGranted) null else {
+                {
+                    permissionLauncher.launch(
+                        arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS)
                     )
                 }
-            }) {
-                Text("Disable Battery Optimization")
             }
-        } else {
+        )
+
+        PermissionStatusRow(
+            title = "Camera",
+            description = "Scan your Mac's pairing QR code",
+            granted = cameraGranted,
+            onFix = if (cameraGranted) null else {
+                { cameraLauncher.launch(Manifest.permission.CAMERA) }
+            }
+        )
+
+        PermissionStatusRow(
+            title = "Ignore battery optimization",
+            description = "Keeps background forwarding alive",
+            granted = ignoringBatteryOptimizations,
+            onFix = if (ignoringBatteryOptimizations) null else {
+                {
+                    runCatching {
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                        )
+                    }
+                }
+            }
+        )
+
+        Text(
+            "On OPPO/OnePlus/Xiaomi phones, also enable Auto-start for CodeBridge in system settings.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** One permission as a row: name, purpose, and a colored granted/missing badge. */
+@Composable
+private fun PermissionStatusRow(
+    title: String,
+    description: String,
+    granted: Boolean,
+    onFix: (() -> Unit)?
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .let { modifier -> if (onFix != null) modifier.clickable(onClick = onFix) else modifier }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(if (granted) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error)
+        )
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.Medium)
             Text(
-                "Battery optimization: disabled. Background forwarding is allowed.",
+                description,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Text(
-            "On OPPO/OnePlus/Xiaomi phones, also enable Auto-start for CodeBridge in system settings.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = if (granted) "✓ Granted" else "✕ Missing",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (granted) {
+                Color(0xFF2E7D32)
+            } else {
+                MaterialTheme.colorScheme.onErrorContainer
+            },
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(
+                    if (granted) {
+                        Color(0x1A4CAF50)
+                    } else {
+                        MaterialTheme.colorScheme.errorContainer
+                    }
+                )
+                .padding(horizontal = 10.dp, vertical = 4.dp)
         )
     }
 }

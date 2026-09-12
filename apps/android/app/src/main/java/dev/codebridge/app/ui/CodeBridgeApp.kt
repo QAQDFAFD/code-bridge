@@ -1,6 +1,7 @@
 package dev.codebridge.app.ui
 
 import android.Manifest
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -239,15 +240,9 @@ private fun PairedMacsScreen(monitor: DeviceMonitor, onAddMac: () -> Unit) {
 
         Spacer(Modifier.height(8.dp))
         Text("Permissions", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "Tap a row with a red badge to grant it.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
 
         PermissionStatusRow(
             title = "SMS access",
-            description = "Receive and forward verification codes",
             granted = smsGranted,
             onFix = if (smsGranted) null else {
                 {
@@ -260,7 +255,6 @@ private fun PairedMacsScreen(monitor: DeviceMonitor, onAddMac: () -> Unit) {
 
         PermissionStatusRow(
             title = "Camera",
-            description = "Scan your Mac's pairing QR code",
             granted = cameraGranted,
             onFix = if (cameraGranted) null else {
                 { cameraLauncher.launch(Manifest.permission.CAMERA) }
@@ -269,7 +263,6 @@ private fun PairedMacsScreen(monitor: DeviceMonitor, onAddMac: () -> Unit) {
 
         PermissionStatusRow(
             title = "Ignore battery optimization",
-            description = "Keeps background forwarding alive",
             granted = ignoringBatteryOptimizations,
             onFix = if (ignoringBatteryOptimizations) null else {
                 {
@@ -285,20 +278,23 @@ private fun PairedMacsScreen(monitor: DeviceMonitor, onAddMac: () -> Unit) {
             }
         )
 
-        Text(
-            "On OPPO/OnePlus/Xiaomi phones, also enable Auto-start for CodeBridge in system settings.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        PermissionStatusRow(
+            title = "Auto-start",
+            granted = null,
+            onFix = { openAutoStartSettings(context) }
         )
     }
 }
 
-/** One permission as a row: name, purpose, and a colored granted/missing badge. */
+/**
+ * One permission as a compact row with a colored Granted/Missing badge.
+ * `granted = null` means the status can't be queried (OEM Auto-start) —
+ * the row shows a neutral Manual badge and opens the OEM settings page.
+ */
 @Composable
 private fun PermissionStatusRow(
     title: String,
-    description: String,
-    granted: Boolean,
+    granted: Boolean?,
     onFix: (() -> Unit)?
 ) {
     Row(
@@ -307,7 +303,7 @@ private fun PermissionStatusRow(
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             .let { modifier -> if (onFix != null) modifier.clickable(onClick = onFix) else modifier }
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -315,35 +311,75 @@ private fun PermissionStatusRow(
             modifier = Modifier
                 .size(10.dp)
                 .clip(CircleShape)
-                .background(if (granted) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error)
-        )
-        Column(Modifier.weight(1f)) {
-            Text(title, fontWeight = FontWeight.Medium)
-            Text(
-                description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Text(
-            text = if (granted) "✓ Granted" else "✕ Missing",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = if (granted) {
-                Color(0xFF2E7D32)
-            } else {
-                MaterialTheme.colorScheme.onErrorContainer
-            },
-            modifier = Modifier
-                .clip(RoundedCornerShape(999.dp))
                 .background(
-                    if (granted) {
-                        Color(0x1A4CAF50)
-                    } else {
-                        MaterialTheme.colorScheme.errorContainer
+                    when (granted) {
+                        true -> Color(0xFF4CAF50)
+                        false -> MaterialTheme.colorScheme.error
+                        null -> Color(0xFF9E9E9E)
                     }
                 )
+        )
+        Text(
+            title,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f)
+        )
+        val badge = when (granted) {
+            true -> Triple("✓ Granted", Color(0xFF2E7D32), Color(0x1A4CAF50))
+            false -> Triple("✕ Missing", MaterialTheme.colorScheme.onErrorContainer, MaterialTheme.colorScheme.errorContainer)
+            null -> Triple("Manual", MaterialTheme.colorScheme.onSurfaceVariant, Color(0x1A9E9E9E))
+        }
+        Text(
+            text = badge.first,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = badge.second,
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(badge.third)
                 .padding(horizontal = 10.dp, vertical = 4.dp)
+        )
+    }
+}
+
+/** Jumps to the OEM auto-start settings when one is installed; app details otherwise. */
+private fun openAutoStartSettings(context: Context) {
+    val candidates = listOf(
+        ComponentName(
+            "com.coloros.safecenter",
+            "com.coloros.safecenter.permission.startup.StartupAppListActivity"
+        ),
+        ComponentName(
+            "com.coloros.safecenter",
+            "com.coloros.safecenter.startupapp.StartupAppListActivity"
+        ),
+        ComponentName(
+            "com.oppo.safe",
+            "com.oppo.safe.permission.startup.StartupAppListActivity"
+        ),
+        ComponentName(
+            "com.miui.securitycenter",
+            "com.miui.securitycenter.AutoStartManagementActivity"
+        ),
+        ComponentName(
+            "com.huawei.systemmanager",
+            "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"
+        ),
+        ComponentName(
+            "com.vivo.permissionmanager",
+            "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"
+        )
+    )
+    for (component in candidates) {
+        val intent = Intent().setComponent(component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (runCatching { context.startActivity(intent) }.isSuccess) return
+    }
+    runCatching {
+        context.startActivity(
+            Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:${context.packageName}")
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     }
 }

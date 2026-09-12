@@ -344,39 +344,43 @@ private fun PermissionStatusRow(
 }
 
 /**
- * Jumps to the OEM auto-start settings when one is installed; the system
- * Apps list otherwise (Auto-start lives under Settings → Apps on most ROMs).
+ * Finds and opens the OEM auto-start settings. The page lives in different
+ * packages/activities per ROM (and per ROM version), so instead of hardcoded
+ * components we scan likely packages — including the system settings app,
+ * where ColorOS keeps it — for exported activities whose class name mentions
+ * "startup"/"autostart", and launch the first one that resolves.
+ * Falls back to the system Apps list with a toast hint.
  */
 private fun openAutoStartSettings(context: Context) {
-    val candidates = listOf(
-        ComponentName(
-            "com.coloros.safecenter",
-            "com.coloros.safecenter.permission.startup.StartupAppListActivity"
-        ),
-        ComponentName(
-            "com.coloros.safecenter",
-            "com.coloros.safecenter.startupapp.StartupAppListActivity"
-        ),
-        ComponentName(
-            "com.oppo.safe",
-            "com.oppo.safe.permission.startup.StartupAppListActivity"
-        ),
-        ComponentName(
-            "com.miui.securitycenter",
-            "com.miui.securitycenter.AutoStartManagementActivity"
-        ),
-        ComponentName(
-            "com.huawei.systemmanager",
-            "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"
-        ),
-        ComponentName(
-            "com.vivo.permissionmanager",
-            "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"
-        )
+    val packages = listOf(
+        "com.coloros.safecenter",
+        "com.oppo.safe",
+        "com.oplus.safecenter",
+        "com.android.settings",
+        "com.miui.securitycenter",
+        "com.huawei.systemmanager",
+        "com.vivo.permissionmanager"
     )
-    for (component in candidates) {
-        val intent = Intent().setComponent(component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (runCatching { context.startActivity(intent) }.isSuccess) return
+    val packageManager = context.packageManager
+
+    for (packageName in packages) {
+        val activities = runCatching {
+            packageManager.getPackageInfo(packageName, PackageManager.GET_ACTIVITIES).activities
+        }.getOrNull().orEmpty()
+
+        activities
+            .filter { it.exported }
+            .filter { activityInfo ->
+                val name = activityInfo.name.lowercase()
+                "startup" in name || "autostart" in name
+            }
+            .sortedByDescending { it.name.lowercase().contains("app") }
+            .forEach { activityInfo ->
+                val intent = Intent()
+                    .setComponent(ComponentName(activityInfo.packageName, activityInfo.name))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (runCatching { context.startActivity(intent) }.isSuccess) return
+            }
     }
 
     Toast.makeText(

@@ -8,6 +8,17 @@
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!-- Visibility for the OEM auto-start settings page discovery -->
+    <queries>
+        <package android:name="com.coloros.safecenter" />
+        <package android:name="com.oppo.safe" />
+        <package android:name="com.oplus.safecenter" />
+        <package android:name="com.android.settings" />
+        <package android:name="com.miui.securitycenter" />
+        <package android:name="com.huawei.systemmanager" />
+        <package android:name="com.vivo.permissionmanager" />
+    </queries>
+
     <application
         android:allowBackup="false"
         android:icon="@android:drawable/ic_dialog_info"

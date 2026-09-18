@@ -21,6 +21,12 @@ jobs:
       - name: Test
         run: swift test
 
+      - name: SwiftLint (advisory)
+        continue-on-error: true
+        run: |
+          brew install swiftlint
+          swiftlint --path apps/macos
+
   android:
     name: Android (unit tests)
     runs-on: ubuntu-latest
@@ -41,3 +47,10 @@ jobs:
 
       - name: Unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace --no-daemon
+
+      - name: ktlint (advisory)
+        continue-on-error: true
+        run: |
+          curl -sSL -o ktlint https://github.com/pinterest/ktlint/releases/download/1.5.0/ktlint
+          chmod +x ktlint
+          ./ktlint --relative 'app/src/main/java/**/*.kt' 'app/src/test/java/**/*.kt' || true

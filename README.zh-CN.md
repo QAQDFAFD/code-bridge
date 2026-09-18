@@ -9,11 +9,15 @@ CodeBridge 是一个本地优先的验证码中继工具，面向 Android 手机
 ## 功能特性
 
 - **短信到剪贴板约 1 秒**：Android 端解析短信中的验证码并通过局域网发送，Mac 端自动复制并通知。
+- **通知通道**：以 App 通知形式送达的验证码（聊天/邮件/银行 App）也能捕获——通过可选的通知监听实现，不涉及 Play 受限的短信权限。
+- **失败重试队列**：没能送达 Mac 的验证码（离线、网络抖动）会先入队，Mac 恢复可达后自动补发。
 - **Mac 端复制 Toast**：每次复制都会在屏幕顶部弹出带绿色对勾的“已复制 &lt;code&gt;”浮动提示——即时可见的确认，开发模式（无系统通知）下同样生效。
 - **扫码配对**：Mac 菜单栏显示二维码（包含设备名、局域网地址、端口和 token），手机扫码即完成配对；也支持手动输入。
 - **多 Mac 管理**：可配对多台 Mac，当前使用的设备高亮标记，点击即切换。
+- **mDNS 自动修复**：Mac 广播 `_codebridge._tcp` 服务，IP 变化后手机会自动发现并更新地址。
 - **自动连接**：手机加入网络（比如回到家连上 Wi-Fi）时自动探测已配对的 Mac 并切换，**后台同样生效，无需打开 App**。
 - **后台转发**：短信转发由系统广播接收器驱动，App 不打开也能工作。
+- **重启不丢历史**、可选的 60 秒剪贴板自动清理、token 重新生成、开机自启开关、防爆破限流（同一来源连续输错 token 返回 429）。
 - **随机 token**：首次启动自动生成，所有请求必须携带。
 
 ## 工作原理
@@ -111,6 +115,9 @@ cd apps/macos && swift test
 
 # Android 单元测试（解析、RelayClient 对 MockWebServer、设置）
 cd apps/android && ./gradlew :app:testDebugUnitTest
+
+# 打包 macOS 应用（release 构建 + 图标 + ad-hoc 签名）
+./scripts/package-macos-app.sh 0.1.0
 ```
 
 解析和历史逻辑放在可单元测试的核心模块里（macOS 的 `CodeBridgeCore`、Android 的 `OtpExtractor`）。改动协议时必须同步更新 `docs/protocol.md` 和两端实现，详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
@@ -122,8 +129,10 @@ cd apps/android && ./gradlew :app:testDebugUnitTest
 - [x] 二维码配对
 - [x] 多 Mac 管理与自动连接
 - [x] Android 权限诊断
-- [ ] Mac 锁屏暂停、剪贴板自动清理
-- [ ] 打包正式 `.app`，启用通知和开机自启
+- [x] 失败重试队列与通知通道
+- [x] 打包正式 `.app`（图标、通知、开机自启）
+- [x] 剪贴板自动清理与防爆破限流
+- [ ] Mac 锁屏暂停
 - [ ] HTTPS / 本地证书锁定
 
 ## 参与贡献

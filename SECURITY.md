@@ -10,6 +10,8 @@ your own Mac. It is not designed to run on hostile networks.
 - Requests must carry the pairing token (`Authorization: Bearer …`), which is
   generated randomly on first launch. The token gates who can push codes, it
   does not encrypt anything.
+- Repeated failed token attempts from one host are rate limited (HTTP 429
+  after 5 failures per 60 seconds) to slow down brute-force guesses.
 - The macOS receiver listens on all interfaces. Firewalls or VLANs can be used
   to further restrict exposure.
 - The Android app stores the token in plain shared preferences and requires

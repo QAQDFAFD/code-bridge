@@ -9,11 +9,15 @@ When your Android phone receives a verification code, CodeBridge sends it to you
 ## Features
 
 - **SMS → clipboard in about a second** on a local network: the Android app parses the OTP from incoming SMS and POSTs it to the Mac, which copies it and notifies you.
+- **Notification channel**: OTPs delivered as app notifications (chat, mail, banking) are captured too via an optional notification listener — no Play-restricted SMS permission involved.
+- **Retry queue**: codes that fail to reach the Mac (offline, network flap) are queued locally and re-delivered once a paired Mac is reachable again.
 - **Copy toast on the Mac**: every copied code pops a floating “已复制 &lt;code&gt;” toast with a green checkmark at the top of the screen — instant visual confirmation that works even in dev runs, where system notifications are unavailable.
 - **QR pairing**: the Mac menu bar shows a QR code encoding its name, LAN address, port, and token; scan it with the phone to pair. Manual entry also works.
 - **Multi-Mac support**: pair several Macs; the active receiver is highlighted and one tap switches between them.
+- **mDNS auto-heal**: the Mac advertises `_codebridge._tcp`; if its IP changes, paired phones re-find and update the address automatically.
 - **Auto-connect**: whenever the phone joins a network (e.g. you get home), paired Macs are probed and the reachable one becomes active — in the background too, no app launch needed.
 - **Background forwarding**: SMS forwarding runs from a system broadcast receiver; it does not require the app to be open.
+- **History that survives restarts**, optional 60-second clipboard auto-clear, token regeneration, login-item toggle, and auth rate limiting (429 after repeated bad tokens from one host).
 - **Random per-install token**: generated on first launch, required for every request.
 
 ## How It Works
@@ -115,6 +119,9 @@ cd apps/macos && swift test
 
 # Android unit tests (parser, relay client against MockWebServer, settings)
 cd apps/android && ./gradlew :app:testDebugUnitTest
+
+# Package the macOS app (release build + icon + ad-hoc signature)
+./scripts/package-macos-app.sh 0.1.0
 ```
 
 Parsing and history logic live in testable core modules (`CodeBridgeCore` on macOS, `OtpExtractor` on Android). Protocol changes must update `docs/protocol.md` and both apps — see [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -126,8 +133,10 @@ Parsing and history logic live in testable core modules (`CodeBridgeCore` on mac
 - [x] QR-code pairing
 - [x] Multi-Mac management with auto-connect
 - [x] Permission diagnostics on Android
-- [ ] Pause while the Mac is locked; auto-clear clipboard
-- [ ] Proper `.app` bundle with notifications and auto-start
+- [x] Retry queue and notification channel
+- [x] Packaged `.app` with icon, notifications, and login item
+- [x] Clipboard auto-clear and auth rate limiting
+- [ ] Pause while the Mac is locked
 - [ ] HTTPS / local certificate pinning
 
 ## Contributing

@@ -78,4 +78,10 @@ The token is missing or invalid.
 
 The JSON payload is invalid, the code fails validation (4–10 alphanumeric characters), or the request is malformed.
 
+```text
+429 Too Many Requests   {"error":"too_many_requests"}
+```
+
+Too many failed authentication attempts from one host within a short window (5 failures / 60s by default). The block expires when the window slides past the failures.
+
 

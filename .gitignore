@@ -26,3 +26,4 @@ captures/
 # Logs / misc
 *.log
 *.hprof
+apps/macos/CodeBridge.app/

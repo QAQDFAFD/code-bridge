@@ -6,6 +6,12 @@ CodeBridge 是一个本地优先的验证码中继工具，面向 Android 手机
 
 当 Android 手机收到短信验证码后，CodeBridge 会通过局域网把验证码发送到 Mac。Mac 菜单栏应用收到后会自动复制到剪贴板，并在菜单栏里保留最近验证码历史。
 
+<p>
+  <img src="docs/screenshots/android-home.png" width="270" alt="已配对 Mac 主页" />
+  <img src="docs/screenshots/android-scan.png" width="270" alt="扫码配对" />
+  <img src="docs/screenshots/android-manual.png" width="270" alt="手动配置" />
+</p>
+
 ## 功能特性
 
 - **短信到剪贴板约 1 秒**：Android 端解析短信中的验证码并通过局域网发送，Mac 端自动复制并通知。

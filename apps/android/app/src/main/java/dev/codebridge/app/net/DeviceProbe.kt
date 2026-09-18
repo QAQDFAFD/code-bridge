@@ -12,6 +12,7 @@ import androidx.work.WorkerParameters
 import dev.codebridge.app.data.CodeBridgeSettings
 import dev.codebridge.app.data.PairedDeviceStore
 import dev.codebridge.app.data.PairedMac
+import dev.codebridge.app.data.PendingSendStore
 import java.util.concurrent.TimeUnit
 
 /**
@@ -64,12 +65,40 @@ class DeviceProbeWorker(
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
         val context = applicationContext
-        DeviceProbe.probeAndActivate(
-            context,
-            PairedDeviceStore(context),
-            RelayClient()
-        )
+        val store = PairedDeviceStore(context)
+        val relay = RelayClient()
+
+        // Re-find Macs over mDNS first so address changes heal before probing.
+        runCatching { MacDiscovery(context).discover() }.getOrNull()
+            ?.map { PairedDeviceStore.DiscoveredMac(it.name, it.host, it.port) }
+            ?.let { store.healAddresses(it) }
+
+        val reachable = DeviceProbe.probeAndActivate(context, store, relay)
+
+        // A paired Mac answered — deliver any codes that failed earlier.
+        if (reachable != null) {
+            drainPending(context, reachable, relay)
+        }
+
         DeviceProbe.schedule(context)
         return Result.success()
+    }
+
+    private fun drainPending(
+        context: Context,
+        device: PairedMac,
+        relay: RelayClient
+    ) {
+        val settings = CodeBridgeSettings(
+            host = device.host,
+            port = device.port,
+            token = device.token
+        )
+        val pending = PendingSendStore(context)
+        pending.all().forEach { payload ->
+            if (relay.send(settings, payload).isSuccess) {
+                pending.remove(payload)
+            }
+        }
     }
 }

@@ -4,9 +4,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
+import dev.codebridge.app.data.PendingSendStore
 import dev.codebridge.app.data.SettingsStore
 import dev.codebridge.app.net.CodeEventPayload
+import dev.codebridge.app.net.DeviceProbe
 import dev.codebridge.app.net.RelayClient
+import dev.codebridge.app.net.RecentCodeGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -24,19 +27,24 @@ class SmsOtpReceiver : BroadcastReceiver() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val settings = SettingsStore(context.applicationContext).read()
+                val appContext = context.applicationContext
+                val settings = SettingsStore(appContext).read()
                 if (!settings.forwardingEnabled) return@launch
-                RelayClient().send(
-                    settings,
-                    CodeEventPayload(
-                        code = otp.code,
-                        sender = sender,
-                        messagePreview = body.take(160),
-                        receivedAt = OffsetDateTime.now().toString(),
-                        source = "sms",
-                        confidence = otp.confidence
-                    )
+                val payload = CodeEventPayload(
+                    code = otp.code,
+                    sender = sender,
+                    messagePreview = body.take(160),
+                    receivedAt = OffsetDateTime.now().toString(),
+                    source = "sms",
+                    confidence = otp.confidence
                 )
+                if (!RecentCodeGate.markSeen(otp.code)) return@launch
+                val result = RelayClient().send(settings, payload)
+                if (result.isFailure) {
+                    // Keep the code for retry as soon as the Mac is reachable again.
+                    PendingSendStore(appContext).enqueue(payload)
+                    DeviceProbe.schedule(appContext)
+                }
             } finally {
                 pendingResult.finish()
             }

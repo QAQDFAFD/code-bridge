@@ -20,6 +20,7 @@ final class CodeHTTPServer: @unchecked Sendable {
     private let nameProvider: @Sendable () -> String
     private let queue = DispatchQueue(label: "dev.codebridge.http-server", qos: .userInitiated)
     private var listener: NWListener?
+    private var throttle = AuthThrottle()
 
     init(
         port: UInt16,
@@ -97,7 +98,8 @@ final class CodeHTTPServer: @unchecked Sendable {
             }
 
             if HTTPCodeRequestParser.isRequestComplete(buffer) {
-                self.send(self.process(buffer), on: connection)
+                let host = Self.hostDescription(of: connection)
+                self.send(self.process(buffer, from: host), on: connection)
                 return
             }
 
@@ -116,9 +118,20 @@ final class CodeHTTPServer: @unchecked Sendable {
         })
     }
 
-    private func process(_ data: Data) -> HTTPResponse {
+    private static func hostDescription(of connection: NWConnection) -> String {
+        if case .hostPort(let host, _) = connection.endpoint {
+            return host.debugDescription
+        }
+        return connection.endpoint.debugDescription
+    }
+
+    private func process(_ data: Data, from host: String) -> HTTPResponse {
+        if throttle.isBlocked(host) {
+            return .tooManyRequests
+        }
         do {
             let parsed = try HTTPCodeRequestParser.parse(data, expectedToken: tokenProvider())
+            throttle.recordSuccess(host)
             switch parsed {
             case .ping:
                 return .pong(name: nameProvider())
@@ -128,6 +141,7 @@ final class CodeHTTPServer: @unchecked Sendable {
                 return .accepted
             }
         } catch CodeBridgeError.unauthorized {
+            throttle.recordFailure(host)
             return .unauthorized
         } catch {
             return .badRequest
@@ -140,6 +154,7 @@ private enum HTTPResponse {
     case badRequest
     case unauthorized
     case pong(name: String)
+    case tooManyRequests
 
     var data: Data {
         let status: String
@@ -160,6 +175,9 @@ private enum HTTPResponse {
             let payload = (try? JSONSerialization.data(withJSONObject: ["ok": true, "name": name]))
                 ?? Data(#"{"ok":true}"#.utf8)
             body = payload
+        case .tooManyRequests:
+            status = "429 Too Many Requests"
+            body = Data(#"{"error":"too_many_requests"}"#.utf8)
         }
 
         let raw = """

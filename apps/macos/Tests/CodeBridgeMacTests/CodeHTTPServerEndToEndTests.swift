@@ -109,6 +109,30 @@ struct CodeHTTPServerEndToEndTests {
         #expect(response.contains("401 Unauthorized"))
     }
 
+    @Test func blocksHostAfterRepeatedAuthFailures() async throws {
+        let (server, port) = try await startServer { _ in }
+        defer { server.stop() }
+
+        // Default limit is 5 failures per host; the 6th attempt is throttled.
+        for _ in 0..<5 {
+            let response = try await performRequest(
+                port: port,
+                method: "GET",
+                path: "/v1/ping",
+                authorization: "Bearer wrong"
+            )
+            #expect(response.contains("401 Unauthorized"))
+        }
+
+        let blocked = try await performRequest(
+            port: port,
+            method: "GET",
+            path: "/v1/ping",
+            authorization: "Bearer wrong"
+        )
+        #expect(blocked.contains("429 Too Many Requests"))
+    }
+
     // MARK: - Helpers
 
     private func startServer(

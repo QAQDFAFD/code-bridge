@@ -18,6 +18,15 @@ final class SettingsStore {
         return token
     }
 
+    func storeToken(_ token: String) {
+        defaults.set(token, forKey: "receiverToken")
+    }
+
+    var autoClearsClipboard: Bool {
+        get { defaults.bool(forKey: "autoClearsClipboard") }
+        set { defaults.set(newValue, forKey: "autoClearsClipboard") }
+    }
+
     /// Random 64-bit token shown in the menu bar and typed once into the
     /// Android app during pairing.
     static func generateToken() -> String {

@@ -82,6 +82,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -156,6 +157,9 @@ private fun PairedMacsScreen(monitor: DeviceMonitor, onAddMac: () -> Unit) {
     val cameraGranted = remember(permissionsTick) {
         ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
+    }
+    val notificationAccessGranted = remember(permissionsTick) {
+        NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
     }
     val ignoringBatteryOptimizations = remember(permissionsTick) {
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -259,6 +263,19 @@ private fun PairedMacsScreen(monitor: DeviceMonitor, onAddMac: () -> Unit) {
             granted = cameraGranted,
             onFix = if (cameraGranted) null else {
                 { cameraLauncher.launch(Manifest.permission.CAMERA) }
+            }
+        )
+
+        PermissionStatusRow(
+            title = "Notification access",
+            granted = notificationAccessGranted,
+            onFix = {
+                runCatching {
+                    context.startActivity(
+                        Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
             }
         )
 

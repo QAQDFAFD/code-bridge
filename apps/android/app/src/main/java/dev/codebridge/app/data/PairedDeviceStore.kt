@@ -62,6 +62,38 @@ class PairedDeviceStore(context: Context) {
 
     fun activeId(): String? = prefs.getString(KEY_ACTIVE, null)
 
+    /**
+     * Updates addresses of paired Macs that were found over mDNS under the
+     * same device name but at a new host/port (IP changed), keeping the
+     * active selection intact.
+     */
+    fun healAddresses(discovered: List<DiscoveredMac>) {
+        val oldDevices = devices()
+        val oldActive = activeId()
+        val healed = oldDevices.map { device ->
+            val match = discovered.firstOrNull { it.name == device.name } ?: return@map device
+            val newPort = match.port.toString()
+            if (match.host == device.host && newPort == device.port) {
+                device
+            } else {
+                device.copy(
+                    id = PairedMac.makeId(match.host, newPort),
+                    host = match.host,
+                    port = newPort
+                )
+            }
+        }
+        if (healed != oldDevices) {
+            save(healed)
+            val moved = oldDevices.zip(healed).firstOrNull { (old, new) -> old.id != new.id }
+            if (moved != null && oldActive == moved.first.id) {
+                prefs.edit().putString(KEY_ACTIVE, moved.second.id).apply()
+            }
+        }
+    }
+
+    data class DiscoveredMac(val name: String, val host: String, val port: Int)
+
     /** Makes [device] the active receiver for the SMS path. */
     fun activate(device: PairedMac) {
         activeSettings.save(

@@ -1,6 +1,7 @@
 import AppKit
 import CodeBridgeCore
 import Foundation
+import ServiceManagement
 import UserNotifications
 
 @MainActor
@@ -13,9 +14,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var serverStatusLine = "Starting…"
     private var titleResetTask: Task<Void, Never>?
     private let toast = CodeToast()
+    private let advertiser = PairingServiceAdvertiser()
+    private let historyStore = HistoryStore()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        history = CodeHistory(events: historyStore.load())
         configureStatusItem()
         requestNotificationPermission()
         startServer()
@@ -55,17 +59,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         server?.start()
+        advertiser.start(name: SettingsStore.deviceName(), port: settings.port)
     }
 
     private func handle(_ event: CodeEvent) {
         guard isReceiving else { return }
 
         history.add(event)
-        ClipboardWriter.copy(event.code)
+        historyStore.save(history.events)
+        copyToClipboard(event.code)
         toast.show(code: event.code)
         showNotification(for: event)
         flashStatusItem()
         rebuildMenu()
+    }
+
+    /// Copies the code; when auto-clear is enabled, wipes it again after
+    /// 60s — but only if the user hasn't copied something else in between.
+    private func copyToClipboard(_ code: String) {
+        ClipboardWriter.copy(code)
+        guard settings.autoClearsClipboard else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(60))
+            ClipboardWriter.clearIfStill(code)
+        }
     }
 
     private func rebuildMenu() {
@@ -109,6 +126,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        let autoClear = NSMenuItem(
+            title: "Auto-clear clipboard (60s)",
+            action: #selector(toggleAutoClear),
+            keyEquivalent: ""
+        )
+        autoClear.target = self
+        autoClear.state = settings.autoClearsClipboard ? .on : .off
+        menu.addItem(autoClear)
+
+        if Bundle.main.bundleIdentifier != nil {
+            let loginItem = NSMenuItem(
+                title: "Start at Login",
+                action: #selector(toggleStartAtLogin),
+                keyEquivalent: ""
+            )
+            loginItem.target = self
+            loginItem.state = isRegisteredForLogin ? .on : .off
+            menu.addItem(loginItem)
+        }
+
         let clear = NSMenuItem(title: "Clear History", action: #selector(clearHistory), keyEquivalent: "")
         clear.target = self
         menu.addItem(clear)
@@ -131,7 +168,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func copyHistoryItem(_ sender: NSMenuItem) {
         guard let event = sender.representedObject as? CodeEvent else { return }
-        ClipboardWriter.copy(event.code)
+        copyToClipboard(event.code)
+        toast.show(code: event.code)
         flashStatusItem(with: "Copied")
     }
 
@@ -142,6 +180,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func clearHistory() {
         history.clear()
+        historyStore.clear()
+        rebuildMenu()
+    }
+
+    @objc private func toggleAutoClear() {
+        settings.autoClearsClipboard.toggle()
         rebuildMenu()
     }
 
@@ -172,7 +216,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             alert.accessoryView = view
         }
         alert.addButton(withTitle: "Done")
-        alert.runModal()
+        alert.addButton(withTitle: "Regenerate Token")
+        let response = alert.runModal()
+
+        if response == .alertSecondButtonReturn {
+            settings.storeToken(SettingsStore.generateToken())
+            server?.stop()
+            startServer()
+            // Reopen so the new QR/token is visible; paired phones must re-scan.
+            openSettings()
+        }
+    }
+
+    private var isRegisteredForLogin: Bool {
+        SMAppService.mainApp.status == .enabled
+    }
+
+    @objc private func toggleStartAtLogin() {
+        do {
+            if isRegisteredForLogin {
+                try SMAppService.mainApp.unregister()
+            } else {
+                try SMAppService.mainApp.register()
+            }
+        } catch {
+            NSLog("CodeBridge login item toggle failed: \(error.localizedDescription)")
+        }
+        rebuildMenu()
     }
 
     @objc private func quit() {

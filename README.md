@@ -1,5 +1,9 @@
 # CodeBridge
 
+[![CI](https://github.com/QAQDFAFD/code-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/QAQDFAFD/code-bridge/actions/workflows/ci.yml)
+[![Release](https://github.com/QAQDFAFD/code-bridge/actions/workflows/release.yml/badge.svg)](https://github.com/QAQDFAFD/code-bridge/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 [中文说明](README.zh-CN.md)
 
 CodeBridge is a tiny local-first OTP relay for Android and macOS.
@@ -28,9 +32,9 @@ When your Android phone receives a verification code, CodeBridge sends it to you
 
 ## How It Works
 
-1. The Mac menu bar app runs a small token-authenticated HTTP server (default port `47821`) on your LAN.
+1. The Mac menu bar app runs a small token-authenticated HTTP server (default port `47821`) on your LAN and advertises itself over mDNS (`_codebridge._tcp`).
 2. The Android app scans the pairing QR (or enters host/port/token), verifies reachability with `GET /v1/ping`, and stores the Mac.
-3. On incoming SMS, the phone extracts the OTP ([OtpExtractor](apps/android/app/src/main/java/dev/codebridge/app/sms/OtpExtractor.kt)) and POSTs it to the active Mac.
+3. When a code arrives — by **SMS** or as an **app notification** — the phone extracts the OTP ([OtpExtractor](apps/android/app/src/main/java/dev/codebridge/app/sms/OtpExtractor.kt)) and POSTs it to the active Mac. Failed sends are queued and retried once the Mac is reachable again.
 4. The Mac validates the request, copies the code to the clipboard, shows a floating “已复制 &lt;code&gt;” toast, posts a notification (when bundled as a real app), and prepends the code to the menu bar history (relative timestamps refresh every time you open the menu).
 
 The wire protocol is documented in [`docs/protocol.md`](docs/protocol.md).
@@ -54,18 +58,18 @@ Note: `swift run` is not a proper `.app` bundle, so system notifications are ski
 
 Requirements: Android Studio, a recent Android SDK, JDK 17+, and a physical Android phone (emulators cannot receive SMS).
 
-Open `apps/android` in Android Studio and run the `app` module on the phone, or build an APK:
+Grab the APK from [Releases](https://github.com/QAQDFAFD/code-bridge/releases) (debug-signed, fine for side-loading), or build it yourself:
 
 ```bash
 cd apps/android
 ./gradlew :app:assembleDebug
-# app/build/outputs/apk/debug/app-debug.apk (debug-signed, fine for side-loading)
+# app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Then:
 
 1. Open CodeBridge → **Add Mac** → **Scan QR**, and point the camera at the QR code in the Mac's Settings (Manual Setup also available).
-2. Grant the permissions listed on the home screen. **SMS access** and **Ignore battery optimization** are required for background forwarding; on OPPO/OnePlus/Xiaomi-style ROMs, also enable **Auto-start** (the app can jump you into the right settings area — the status itself is not queryable).
+2. Grant the permissions listed on the home screen. **SMS access** and **Ignore battery optimization** are required for background forwarding; **Notification access** adds the app-notification channel (chat/mail/banking codes); on OPPO/OnePlus/Xiaomi-style ROMs, also enable **Auto-start** (the app can jump you into the right settings area — the status itself is not queryable).
 3. Tap **Send Test Code** (Manual Setup tab) — the code should land on your Mac clipboard.
 
 ### Verify locally
@@ -81,7 +85,7 @@ A `{"ok":true}` response and a clipboard containing the test code means the pipe
 ## Background Behavior
 
 - SMS forwarding is driven by a manifest broadcast receiver — it works with the app closed, as long as the OS hasn't killed the app (grant battery-optimization exemption / Auto-start on aggressive ROMs).
-- A WorkManager job re-probes paired Macs on every network change and activates the reachable one, without opening the app.
+- A WorkManager job re-probes paired Macs on every network change and activates the reachable one, without opening the app. The Mac's mDNS advertisement heals stored addresses after IP changes, and any queued codes are delivered once a Mac answers.
 - The foreground UI shows live connection status per paired Mac.
 
 ## Security & Privacy
@@ -98,10 +102,13 @@ apps/
   android/   Android sender (Kotlin + Compose, CameraX + ZXing for QR pairing)
   macos/     macOS menu bar receiver (Swift, Network.framework HTTP server)
 docs/
-  protocol.md   Local HTTP protocol (/v1/codes, /v1/ping)
+  protocol.md     Local HTTP protocol (/v1/codes, /v1/ping)
+  assets/         Source icon artwork
+  screenshots/    App screenshots
 scripts/
-  send-test-code.sh   CLI smoke test against the Mac receiver
-.github/workflows/    CI (Swift tests + Android unit tests)
+  send-test-code.sh        CLI smoke test against the Mac receiver
+  package-macos-app.sh     Package CodeBridge.app (icon + ad-hoc signature)
+.github/workflows/         CI (tests + advisory lint) and tag-triggered releases
 ```
 
 ## App Icon

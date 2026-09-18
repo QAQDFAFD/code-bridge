@@ -1,5 +1,9 @@
 # CodeBridge
 
+[![CI](https://github.com/QAQDFAFD/code-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/QAQDFAFD/code-bridge/actions/workflows/ci.yml)
+[![Release](https://github.com/QAQDFAFD/code-bridge/actions/workflows/release.yml/badge.svg)](https://github.com/QAQDFAFD/code-bridge/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 [English](README.md)
 
 CodeBridge 是一个本地优先的验证码中继工具，面向 Android 手机和 macOS。
@@ -28,9 +32,9 @@ CodeBridge 是一个本地优先的验证码中继工具，面向 Android 手机
 
 ## 工作原理
 
-1. Mac 菜单栏应用在局域网内运行一个需要 token 鉴权的小型 HTTP 服务（默认端口 `47821`）。
+1. Mac 菜单栏应用在局域网内运行一个需要 token 鉴权的小型 HTTP 服务（默认端口 `47821`），并通过 mDNS 广播自己（`_codebridge._tcp`）。
 2. Android 扫码（或手动输入地址/端口/token），用 `GET /v1/ping` 验证连通后保存这台 Mac。
-3. 收到短信时，手机解析出验证码（[OtpExtractor](apps/android/app/src/main/java/dev/codebridge/app/sms/OtpExtractor.kt)）并 POST 到当前活跃的 Mac。
+3. 验证码到达时——无论是**短信**还是 **App 通知**——手机解析出验证码（[OtpExtractor](apps/android/app/src/main/java/dev/codebridge/app/sms/OtpExtractor.kt)）并 POST 到当前活跃的 Mac；发送失败会自动排队，Mac 恢复可达后补发。
 4. Mac 校验请求、复制验证码到剪贴板、弹出“已复制 &lt;code&gt;”浮动提示、发通知（打包为正式 App 时）、写入菜单栏历史（每次打开菜单都会刷新相对时间）。
 
 协议细节见 [`docs/protocol.md`](docs/protocol.md)。
@@ -54,18 +58,18 @@ swift run CodeBridgeMac
 
 要求：Android Studio、较新的 Android SDK、JDK 17 或更新版本、一台 Android 真机（模拟器收不了短信）。
 
-用 Android Studio 打开 `apps/android` 运行 `app` 模块，或直接打 APK：
+从 [Releases](https://github.com/QAQDFAFD/code-bridge/releases) 直接下载 APK（调试签名，自用侧载足够），或自己构建：
 
 ```bash
 cd apps/android
 ./gradlew :app:assembleDebug
-# 产物: app/build/outputs/apk/debug/app-debug.apk（调试签名，自用侧载足够）
+# 产物: app/build/outputs/apk/debug/app-debug.apk
 ```
 
 然后：
 
 1. 打开 CodeBridge → **Add Mac** → **Scan QR**，对准 Mac 设置弹窗里的二维码（Manual Setup 页可手动输入）。
-2. 授予首页权限列表中的权限。**SMS access** 和 **Ignore battery optimization** 是后台转发必需的；OPPO/一加/小米等机型还需开启 **Auto-start**（点该行可直接跳到对应设置区域——状态本身无法查询）。
+2. 授予首页权限列表中的权限。**SMS access** 和 **Ignore battery optimization** 是后台转发必需的；**Notification access** 可解锁 App 通知验证码通道（聊天/邮件/银行）；OPPO/一加/小米等机型还需开启 **Auto-start**（点该行可直接跳到对应设置区域——状态本身无法查询）。
 3. 在 Manual Setup 页点 **Send Test Code**，验证码应该出现在 Mac 剪贴板。
 
 ### 本地验证
@@ -81,7 +85,7 @@ Mac 应用启动后，从仓库根目录执行：
 ## 后台行为
 
 - 短信转发由 manifest 广播接收器驱动——App 关闭也能工作，前提是系统没有杀掉进程（激进省电的机型请授予电池优化豁免/自启动）。
-- WorkManager 任务在每次网络变化时重新探测已配对的 Mac 并激活可达的设备，无需打开 App。
+- WorkManager 任务在每次网络变化时重新探测已配对的 Mac 并激活可达的设备，无需打开 App；Mac 的 mDNS 广播会自动修复 IP 变化后的地址，Mac 恢复可达时自动补发排队的验证码。
 - 前台界面对每台已配对的 Mac 显示实时连接状态。
 
 ## 安全与隐私
@@ -98,10 +102,13 @@ apps/
   android/   Android 发送端（Kotlin + Compose，CameraX + ZXing 扫码配对）
   macos/     macOS 菜单栏接收端（Swift，Network.framework HTTP 服务）
 docs/
-  protocol.md   本地 HTTP 协议（/v1/codes、/v1/ping）
+  protocol.md     本地 HTTP 协议（/v1/codes、/v1/ping）
+  assets/         图标源文件
+  screenshots/    应用截图
 scripts/
-  send-test-code.sh   针对接收端的命令行冒烟测试
-.github/workflows/    CI（Swift 测试 + Android 单元测试）
+  send-test-code.sh        针对接收端的命令行冒烟测试
+  package-macos-app.sh     打包 CodeBridge.app（图标 + ad-hoc 签名）
+.github/workflows/         CI（测试 + 非阻断 lint）与标签触发的发布
 ```
 
 ## 应用图标

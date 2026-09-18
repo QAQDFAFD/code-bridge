@@ -11,9 +11,9 @@ CodeBridge is a tiny local-first OTP relay for Android and macOS.
 When your Android phone receives a verification code, CodeBridge sends it to your Mac over the local network. The Mac menu bar app copies the code to the clipboard, shows a notification, and keeps a short recent-code history.
 
 <p>
-  <img src="docs/screenshots/android-home.png" width="270" alt="Paired Macs home screen" />
-  <img src="docs/screenshots/android-scan.png" width="270" alt="QR pairing scanner" />
-  <img src="docs/screenshots/android-manual.png" width="270" alt="Manual setup" />
+  <img src="docs/screenshots/home.png" width="270" alt="Paired Macs home screen" />
+  <img src="docs/screenshots/scan-qr.png" width="270" alt="QR pairing scanner" />
+  <img src="docs/screenshots/manual-setup.png" width="270" alt="Manual setup" />
 </p>
 
 ## Features
